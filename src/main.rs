@@ -46,14 +46,11 @@ impl Matrix {
 
     pub fn get(&self, row: usize, col: usize) -> Result<f32, MatrixError> {
         let index = row * self.cols + col;
-        let val: f32 = *self
-            .data
-            .get(index)
-            .ok_or(MatrixError::IndexOutOfBounds {
-                index,
-                rows: self.rows,
-                cols: self.cols,
-            })?;
+        let val: f32 = *self.data.get(index).ok_or(MatrixError::IndexOutOfBounds {
+            index,
+            rows: self.rows,
+            cols: self.cols,
+        })?;
         Ok(val)
     }
 
@@ -88,6 +85,38 @@ impl Matrix {
             .zip(&b.data)
             .for_each(|(a_val, b_val)| *a_val -= *b_val);
         Ok(())
+    }
+
+    pub fn mul(&mut self, b: &Matrix) -> Result<Matrix, MatrixError> {
+        if self.cols != b.rows {
+            return Err(MatrixError::DimensionMismatch {
+                expected: (self.cols, b.cols),
+                actual: (b.rows, b.cols),
+            });
+        }
+        let b_t = b.transpose()?;
+        let mut c = Matrix::new(self.rows, b.cols, 0.0);
+        for i in 0..self.rows {
+            for j in 0..b.cols {
+                let mut s: f32 = 0.0;
+                for k in 0..self.cols {
+                    s += self.data[i * self.cols + k] * b_t.data[j * b.cols + k];
+                }
+                c.set(i, j, s);
+            }
+        }
+        Ok(c)
+    }
+
+    pub fn transpose(&self) -> Result<Matrix, MatrixError> {
+        let mut result = Matrix::new(self.cols, self.rows, 0.0);
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                let index = i * self.cols + j;
+                result.set(j, i, self.data[index]);
+            }
+        }
+        Ok(result)
     }
 
     pub fn randomize(&mut self, seed: &mut u32) -> Result<(), MatrixError> {
@@ -146,6 +175,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Randomizing matrix.");
     let _ = c.randomize(&mut seed);
+    println!("{c}");
+
+    println!("Matrix Multiplication. (C = A x B)");
+    c = a.mul(&b)?;
     println!("{c}");
 
     Ok(())
