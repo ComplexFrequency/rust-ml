@@ -1,4 +1,23 @@
 use std::fmt;
+use std::fs::File;
+use std::io::{self, Read};
+use std::process::Command;
+
+
+fn read_u32(file: &mut File) -> io::Result<u32> {
+    let mut buffer = [0u8; 4];
+    file.read_exact(&mut buffer)?;
+    Ok(u32::from_be_bytes(buffer))
+}
+
+fn download_mnist() {
+    let url = "https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz";
+    Command::new("curl")
+        .arg("-O") // Saves with the original filename
+        .arg(url)
+        .status()
+        .expect("Failed to download MNIST images");
+}
 
 #[derive(Debug)]
 enum MatrixError {
@@ -194,60 +213,6 @@ fn sigmoid(x: f32) -> f32 {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Initializing Matrices.");
-    let mut a = Matrix {
-        rows: 2,
-        cols: 2,
-        data: vec![0.0, 1.0, 2.0, 3.0],
-    };
-    let b = Matrix {
-        rows: 2,
-        cols: 2,
-        data: vec![4.0, 5.0, 6.0, 7.0],
-    };
-    let mut c = Matrix::new(2, 2, 0.0);
-    let mut seed: u32 = 42;
-
-    println!("{a}");
-    println!("{b}");
-    println!("{c}");
-
-    println!("Adding Matrices. (C = A + B)");
-    a.add(&b)?;
-    println!("{a}");
-
-    println!("Subtracting Matrices. (A = C - B)");
-    a.sub(&b)?;
-    println!("{a}");
-
-    println!("Setting value at pos (0, 0).");
-    a.set(0, 0, -1.0);
-    println!("{a}");
-
-    println!("Getting value at pos (0, 1)");
-    let s = a.get(0, 1)?;
-    println!("{s}");
-
-    println!("Matrix Multiplication. (C = A x B)");
-    c = a.mul(&b)?;
-    println!("{c}");
-
-    println!("Randomizing matrix.");
-    c.randomize(&mut seed)?;
-    println!("{c}");
-
-    println!("Applying ReLU.");
-    c.apply(relu);
-    println!("{c}");
-
-    println!("Applying sigmoid.");
-    c.apply(sigmoid);
-    println!("{c}");
-
-    println!("Applying vector to rows.");
-    let d = vec![5.0, -5.0];
-    c.add_vector_to_rows(&d)?;
-    println!("{c}");
-
+    download_mnist();
     Ok(())
 }
