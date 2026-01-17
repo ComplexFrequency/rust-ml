@@ -39,12 +39,12 @@ struct Matrix {
 }
 
 impl Matrix {
-    fn new(rows: usize, cols: usize, val: f32) -> Matrix {
+    pub fn new(rows: usize, cols: usize, val: f32) -> Matrix {
         let data = vec![val; rows * cols];
         Matrix { rows, cols, data }
     }
 
-    fn get(&self, row: usize, col: usize) -> Result<f32, MatrixError> {
+    pub fn get(&self, row: usize, col: usize) -> Result<f32, MatrixError> {
         let index = row * self.cols + col;
         let val: f32 = *self
             .data
@@ -57,12 +57,12 @@ impl Matrix {
         Ok(val)
     }
 
-    fn set(&mut self, row: usize, col: usize, val: f32) {
+    pub fn set(&mut self, row: usize, col: usize, val: f32) {
         let index = row * self.cols + col;
         self.data[index] = val;
     }
 
-    fn add(&mut self, b: &Matrix) -> Result<(), MatrixError> {
+    pub fn add(&mut self, b: &Matrix) -> Result<(), MatrixError> {
         if self.rows != b.rows || self.cols != b.cols {
             return Err(MatrixError::DimensionMismatch {
                 expected: (self.rows, self.cols),
@@ -76,7 +76,7 @@ impl Matrix {
         Ok(())
     }
 
-    fn sub(&mut self, b: &Matrix) -> Result<(), MatrixError> {
+    pub fn sub(&mut self, b: &Matrix) -> Result<(), MatrixError> {
         if self.rows != b.rows || self.cols != b.cols {
             return Err(MatrixError::DimensionMismatch {
                 expected: (self.rows, self.cols),
@@ -90,7 +90,7 @@ impl Matrix {
         Ok(())
     }
 
-    fn randomize(&mut self, seed: &mut u32) -> Result<(), MatrixError> {
+    pub fn randomize(&mut self, seed: &mut u32) -> Result<(), MatrixError> {
         self.data.iter_mut().for_each(|v| {
             *seed = (*seed as u64 * 1103515245 + 12345) as u32 % 2147483648;
             *v = (*seed as f32) / 2147483648.0 * 2.0 - 1.0;
