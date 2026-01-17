@@ -80,11 +80,12 @@ impl Matrix {
                 actual: (b.len(), 1),
             });
         }
-        self.data
-            .chunks_mut(self.cols)
-            .for_each(|chunk| {
-                chunk.iter_mut().zip(b).for_each(|(a_val, b_val)| *a_val += *b_val);
-            });
+        self.data.chunks_mut(self.cols).for_each(|chunk| {
+            chunk
+                .iter_mut()
+                .zip(b)
+                .for_each(|(a_val, b_val)| *a_val += *b_val);
+        });
         Ok(())
     }
 
@@ -102,7 +103,7 @@ impl Matrix {
         Ok(())
     }
 
-    pub fn mul(&mut self, b: &Matrix) -> Result<Matrix, MatrixError> {
+    pub fn mul(&self, b: &Matrix) -> Result<Matrix, MatrixError> {
         if self.cols != b.rows {
             return Err(MatrixError::DimensionMismatch {
                 expected: (self.cols, b.cols),
@@ -162,12 +163,30 @@ impl fmt::Display for Matrix {
     }
 }
 
-fn relu(x: f32) -> f32 {
-    if x > 0.0 {
-        x
-    } else {
-        0.0
+struct Layer {
+    weights: Matrix,
+    biases: Vec<f32>,
+}
+
+impl Layer {
+    fn new(input_size: usize, output_size: usize, seed: &mut u32) -> Result<Layer, MatrixError> {
+        let mut weights = Matrix::new(input_size, output_size, 0.0);
+        let biases = vec![0.0; output_size];
+
+        weights.randomize(seed)?;
+
+        Ok(Layer { weights, biases })
     }
+
+    pub fn forward(&self, input: &Matrix) -> Result<Matrix, MatrixError> {
+        let mut res = input.mul(&self.weights)?;
+        res.add_vector_to_rows(&self.biases)?;
+        Ok(res)
+    }
+}
+
+fn relu(x: f32) -> f32 {
+    if x > 0.0 { x } else { 0.0 }
 }
 
 fn sigmoid(x: f32) -> f32 {
@@ -194,11 +213,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{c}");
 
     println!("Adding Matrices. (C = A + B)");
-    let _ = a.add(&b);
+    a.add(&b)?;
     println!("{a}");
 
     println!("Subtracting Matrices. (A = C - B)");
-    let _ = a.sub(&b);
+    a.sub(&b)?;
     println!("{a}");
 
     println!("Setting value at pos (0, 0).");
@@ -214,7 +233,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{c}");
 
     println!("Randomizing matrix.");
-    let _ = c.randomize(&mut seed);
+    c.randomize(&mut seed)?;
     println!("{c}");
 
     println!("Applying ReLU.");
@@ -227,7 +246,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Applying vector to rows.");
     let d = vec![5.0, -5.0];
-    let _ = c.add_vector_to_rows(&d);
+    c.add_vector_to_rows(&d)?;
     println!("{c}");
 
     Ok(())
