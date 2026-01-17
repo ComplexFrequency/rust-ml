@@ -39,8 +39,8 @@ struct Matrix {
 }
 
 impl Matrix {
-    fn new(rows: usize, cols: usize) -> Matrix {
-        let data = vec![0.0; rows * cols];
+    fn new(rows: usize, cols: usize, val: f32) -> Matrix {
+        let data = vec![val; rows * cols];
         Matrix { rows, cols, data }
     }
 
@@ -89,6 +89,14 @@ impl Matrix {
             .for_each(|(a_val, b_val)| *a_val -= *b_val);
         Ok(())
     }
+
+    fn randomize(&mut self, seed: &mut u32) -> Result<(), MatrixError> {
+        self.data.iter_mut().for_each(|v| {
+            *seed = (*seed as u64 * 1103515245 + 12345) as u32 % 2147483648;
+            *v = (*seed as f32) / 2147483648.0 * 2.0 - 1.0;
+        });
+        Ok(())
+    }
 }
 
 impl fmt::Display for Matrix {
@@ -113,7 +121,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cols: 2,
         data: vec![4.0, 5.0, 6.0, 7.0],
     };
-    let c = Matrix::new(2, 2);
+    let mut c = Matrix::new(2, 2, 0.0);
+    let mut seed: u32 = 42;
+
     println!("{a}");
     println!("{b}");
     println!("{c}");
@@ -133,6 +143,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Getting value at pos (0, 1)");
     let s = a.get(0, 1)?;
     println!("{s}");
+
+    println!("Randomizing matrix.");
+    let _ = c.randomize(&mut seed);
+    println!("{c}");
 
     Ok(())
 }
