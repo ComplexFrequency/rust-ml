@@ -126,6 +126,15 @@ impl Matrix {
         });
         Ok(())
     }
+
+    pub fn apply<F>(&mut self, f: F)
+    where
+        F: Fn(f32) -> f32,
+    {
+        self.data.iter_mut().for_each(|x| {
+            *x = f(*x);
+        });
+    }
 }
 
 impl fmt::Display for Matrix {
@@ -136,6 +145,18 @@ impl fmt::Display for Matrix {
             self.rows, self.cols, self.data
         )
     }
+}
+
+fn relu(x: f32) -> f32 {
+    if x > 0.0 {
+        x
+    } else {
+        0.0
+    }
+}
+
+fn sigmoid(x: f32) -> f32 {
+    1.0 / (1.0 + f32::exp(-x))
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -173,12 +194,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let s = a.get(0, 1)?;
     println!("{s}");
 
+    println!("Matrix Multiplication. (C = A x B)");
+    c = a.mul(&b)?;
+    println!("{c}");
+
     println!("Randomizing matrix.");
     let _ = c.randomize(&mut seed);
     println!("{c}");
 
-    println!("Matrix Multiplication. (C = A x B)");
-    c = a.mul(&b)?;
+    println!("Applying ReLU.");
+    c.apply(relu);
+    println!("{c}");
+
+    println!("Applying sigmoid.");
+    c.apply(sigmoid);
     println!("{c}");
 
     Ok(())
