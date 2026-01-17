@@ -73,6 +73,21 @@ impl Matrix {
         Ok(())
     }
 
+    pub fn add_vector_to_rows(&mut self, b: &Vec<f32>) -> Result<(), MatrixError> {
+        if self.cols != b.len() {
+            return Err(MatrixError::DimensionMismatch {
+                expected: (self.cols, 1),
+                actual: (b.len(), 1),
+            });
+        }
+        self.data
+            .chunks_mut(self.cols)
+            .for_each(|chunk| {
+                chunk.iter_mut().zip(b).for_each(|(a_val, b_val)| *a_val += *b_val);
+            });
+        Ok(())
+    }
+
     pub fn sub(&mut self, b: &Matrix) -> Result<(), MatrixError> {
         if self.rows != b.rows || self.cols != b.cols {
             return Err(MatrixError::DimensionMismatch {
@@ -208,6 +223,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Applying sigmoid.");
     c.apply(sigmoid);
+    println!("{c}");
+
+    println!("Applying vector to rows.");
+    let d = vec![5.0, -5.0];
+    let _ = c.add_vector_to_rows(&d);
     println!("{c}");
 
     Ok(())
