@@ -1,9 +1,8 @@
-use std::path::Path;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
+use std::path::Path;
 use std::process::Command;
-
 
 fn read_u32(file: &mut File) -> io::Result<u32> {
     let mut buffer = [0u8; 4];
@@ -131,7 +130,7 @@ impl fmt::Display for MatrixError {
 
 impl std::error::Error for MatrixError {}
 
-struct Matrix {
+pub struct Matrix {
     rows: usize,
     cols: usize,
     data: Vec<f32>,
@@ -290,6 +289,25 @@ fn relu(x: f32) -> f32 {
 
 fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + f32::exp(-x))
+}
+
+pub fn softmax(matrix: &Matrix) -> Matrix {
+    let mut result = Matrix::new(matrix.rows, matrix.cols, 0.0);
+
+    for r in 0..matrix.rows {
+        let start = r * matrix.cols;
+        let end = start + matrix.cols;
+        let row = &matrix.data[start..end];
+
+        let max_val = row.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        let sum: f32 = row.iter().map(|x| f32::exp(x - max_val)).sum();
+
+        for c in 0..row.len() {
+            result.set(r, c, f32::exp(row[c] - max_val) / sum);
+        }
+    }
+
+    result
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
