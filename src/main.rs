@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
@@ -10,13 +11,92 @@ fn read_u32(file: &mut File) -> io::Result<u32> {
     Ok(u32::from_be_bytes(buffer))
 }
 
-fn download_mnist() {
-    let url = "https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz";
-    Command::new("curl")
-        .arg("-O") // Saves with the original filename
+fn download_file(path: &Path, url: &str) {
+    if path.exists() {
+        return;
+    }
+    let status = Command::new("curl")
+        .arg("-o")
+        .arg(path)
         .arg(url)
         .status()
-        .expect("Failed to download MNIST images");
+        .expect("Failed to execute curl");
+
+    if !status.success() {
+        panic!("Curl failed to download the data!");
+    }
+}
+
+fn unzip_file(path: &Path) {
+    let mut target = path.to_path_buf();
+    target.set_extension("");
+
+    if target.exists() {
+        return;
+    }
+
+    if !path.exists() {
+        panic!("Attempted to unzip {:?}, but the file is missing!", path);
+    }
+
+    let status = Command::new("gzip")
+        .arg("-d")
+        .arg(path)
+        .status()
+        .expect("Failed to execute gzip");
+
+    if !status.success() {
+        panic!("Gzip failed!");
+    }
+}
+
+fn load_mnist_images(path: &Path) -> Result<Matrix, Box<dyn std::error::Error>> {
+    let mut file = File::open(path)?;
+
+    let magic = read_u32(&mut file)?;
+    let num_images = read_u32(&mut file)? as usize;
+    let rows = read_u32(&mut file)? as usize;
+    let cols = read_u32(&mut file)? as usize;
+
+    if magic != 2051 {
+        return Err("Invalid magic number for MNIST images".into());
+    }
+
+    let pixels_per_image = rows * cols;
+    let mut matrix = Matrix::new(num_images, pixels_per_image, 0.0);
+
+    let mut raw_pixels = Vec::new();
+    file.read_to_end(&mut raw_pixels)?;
+
+    matrix.data = raw_pixels.iter().map(|x| (*x as f32) / 255.0).collect();
+
+    Ok(matrix)
+}
+
+fn load_mnist_labels(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut file = File::open(path)?;
+
+    let magic = read_u32(&mut file)?;
+    let _num_items = read_u32(&mut file)?;
+
+    if magic != 2049 {
+        return Err("Invalid magic number for MNIST labels".into());
+    }
+
+    let mut data = Vec::new();
+    file.read_to_end(&mut data)?;
+
+    Ok(data)
+}
+
+fn one_hot_encode(labels: &[u8]) -> Matrix {
+    let mut matrix = Matrix::new(labels.len(), 10, 0.0);
+
+    for (i, &label) in labels.iter().enumerate() {
+        matrix.set(i, label as usize, 1.0);
+    }
+
+    matrix
 }
 
 #[derive(Debug)]
@@ -213,6 +293,21 @@ fn sigmoid(x: f32) -> f32 {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    download_mnist();
+    let img_gz = Path::new("/tmp/train-images-idx3-ubyte.gz");
+    let img_raw = Path::new("/tmp/train-images-idx3-ubyte");
+    let img_url = "https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz";
+    download_file(img_gz, img_url);
+    unzip_file(img_gz);
+    let matrix = load_mnist_images(img_raw)?;
+
+    let lbl_gz = Path::new("/tmp/train-labels-idx1-ubyte.gz");
+    let lbl_raw = Path::new("/tmp/train-labels-idx1-ubyte");
+    let lbl_url = "https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz";
+    download_file(lbl_gz, lbl_url);
+    unzip_file(lbl_gz);
+    let labels = load_mnist_labels(lbl_raw)?;
+
+    println!("Images: {}x{}", matrix.rows, matrix.cols);
+    println!("First 10 labels: {:?}", &labels[..10]);
     Ok(())
 }
