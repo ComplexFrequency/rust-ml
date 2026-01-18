@@ -79,7 +79,7 @@ fn load_mnist_labels(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>>
     let _num_items = read_u32(&mut file)?;
 
     if magic != 2049 {
-        return Err("Invalid magic number for MNIST labels".into());
+        return Err("Invalid magic number".into());
     }
 
     let mut data = Vec::new();
@@ -99,7 +99,7 @@ fn one_hot_encode(labels: &[u8]) -> Matrix {
 }
 
 #[derive(Debug)]
-enum MatrixError {
+pub enum MatrixError {
     DimensionMismatch {
         expected: (usize, usize),
         actual: (usize, usize),
@@ -204,17 +204,19 @@ impl Matrix {
     pub fn mul(&self, b: &Matrix) -> Result<Matrix, MatrixError> {
         if self.cols != b.rows {
             return Err(MatrixError::DimensionMismatch {
-                expected: (self.cols, b.cols),
-                actual: (b.rows, b.cols),
+                expected: (self.cols, 0),
+                actual: (b.rows, 0),
             });
         }
+
         let b_t = b.transpose()?;
         let mut c = Matrix::new(self.rows, b.cols, 0.0);
+
         for i in 0..self.rows {
             for j in 0..b.cols {
                 let mut s: f32 = 0.0;
                 for k in 0..self.cols {
-                    s += self.data[i * self.cols + k] * b_t.data[j * b.cols + k];
+                    s += self.data[i * self.cols + k] * b_t.data[j * b_t.cols + k];
                 }
                 c.set(i, j, s);
             }
@@ -281,6 +283,19 @@ impl Layer {
         res.add_vector_to_rows(&self.biases)?;
         Ok(res)
     }
+
+    pub fn update_weights(&mut self, input: &Matrix, grad_output: &Matrix, learning_rate: f32) {
+        let input_t = input.transpose().unwrap();
+        let delta_w = input_t.mul(grad_output).unwrap();
+
+        for i in 0..self.weights.data.len() {
+            self.weights.data[i] -= learning_rate * delta_w.data[i];
+        }
+
+        for i in 0..self.biases.len() {
+            self.biases[i] -= learning_rate * grad_output.data[i];
+        }
+    }
 }
 
 fn relu(x: f32) -> f32 {
@@ -314,18 +329,74 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let img_gz = Path::new("/tmp/train-images-idx3-ubyte.gz");
     let img_raw = Path::new("/tmp/train-images-idx3-ubyte");
     let img_url = "https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz";
-    download_file(img_gz, img_url);
-    unzip_file(img_gz);
-    let matrix = load_mnist_images(img_raw)?;
-
+    
     let lbl_gz = Path::new("/tmp/train-labels-idx1-ubyte.gz");
     let lbl_raw = Path::new("/tmp/train-labels-idx1-ubyte");
     let lbl_url = "https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz";
+
+    download_file(img_gz, img_url);
+    unzip_file(img_gz);
     download_file(lbl_gz, lbl_url);
     unzip_file(lbl_gz);
+
+    let matrix = load_mnist_images(img_raw)?;
     let labels = load_mnist_labels(lbl_raw)?;
 
-    println!("Images: {}x{}", matrix.rows, matrix.cols);
-    println!("First 10 labels: {:?}", &labels[..10]);
+    println!("Dataset Loaded. Images: {}x{}", matrix.rows, matrix.cols);
+    println!("Starting Training...");
+
+    let learning_rate = 0.01;
+    let mut seed = 12345;
+    let mut layer = Layer::new(784, 10, &mut seed)?;
+
+    let mut correct_predictions = 0;
+    let mut running_loss = 0.0;
+    let window_size = 1000;
+
+    for i in 0..matrix.rows {
+        let row_start = i * 784;
+        let mut input_row = Matrix::new(1, 784, 0.0);
+        input_row.data.copy_from_slice(&matrix.data[row_start..row_start + 784]);
+
+        let logits = layer.forward(&input_row)?;
+        let probs = softmax(&logits);
+
+        let label = labels[i] as usize;
+        
+        let mut predicted_digit = 0;
+        let mut max_prob = -1.0;
+        for (idx, &p) in probs.data.iter().enumerate() {
+            if p > max_prob {
+                max_prob = p;
+                predicted_digit = idx;
+            }
+        }
+
+        if predicted_digit == label {
+            correct_predictions += 1;
+        }
+        
+        running_loss -= (probs.data[label] + 1e-10).ln();
+
+        let mut error = probs; 
+        let current_val = error.get(0, label)?;
+        error.set(0, label, current_val - 1.0);
+
+        layer.update_weights(&input_row, &error, learning_rate);
+
+        if i % window_size == 0 && i > 0 {
+            let accuracy = (correct_predictions as f32 / window_size as f32) * 100.0;
+            let avg_loss = running_loss / window_size as f32;
+            println!(
+                "Sample: {:5} | Accuracy: {:>5.2}% | Avg Loss: {:.4}", 
+                i, accuracy, avg_loss
+            );
+            
+            correct_predictions = 0;
+            running_loss = 0.0;
+        }
+    }
+
+    println!("Training complete!");
     Ok(())
 }
