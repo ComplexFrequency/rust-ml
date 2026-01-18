@@ -1,4 +1,5 @@
-use std::fmt;
+use rust_ml::{Matrix, MatrixError};
+
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
@@ -98,171 +99,6 @@ fn one_hot_encode(labels: &[u8]) -> Matrix {
     matrix
 }
 
-#[derive(Debug)]
-pub enum MatrixError {
-    DimensionMismatch {
-        expected: (usize, usize),
-        actual: (usize, usize),
-    },
-    IndexOutOfBounds {
-        index: usize,
-        rows: usize,
-        cols: usize,
-    },
-}
-
-impl fmt::Display for MatrixError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            MatrixError::DimensionMismatch { expected, actual } => {
-                write!(f, "Expected {:?}, got {:?}.", expected, actual)
-            }
-            MatrixError::IndexOutOfBounds { index, rows, cols } => {
-                write!(
-                    f,
-                    "Index out of Bounds! Tried to access index {:?} of {:}x{:} matrix.",
-                    index, rows, cols
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for MatrixError {}
-
-pub struct Matrix {
-    rows: usize,
-    cols: usize,
-    data: Vec<f32>,
-}
-
-impl Matrix {
-    pub fn new(rows: usize, cols: usize, val: f32) -> Matrix {
-        let data = vec![val; rows * cols];
-        Matrix { rows, cols, data }
-    }
-
-    pub fn get(&self, row: usize, col: usize) -> Result<f32, MatrixError> {
-        let index = row * self.cols + col;
-        let val: f32 = *self.data.get(index).ok_or(MatrixError::IndexOutOfBounds {
-            index,
-            rows: self.rows,
-            cols: self.cols,
-        })?;
-        Ok(val)
-    }
-
-    pub fn set(&mut self, row: usize, col: usize, val: f32) {
-        let index = row * self.cols + col;
-        self.data[index] = val;
-    }
-
-    pub fn add(&mut self, b: &Matrix) -> Result<(), MatrixError> {
-        if self.rows != b.rows || self.cols != b.cols {
-            return Err(MatrixError::DimensionMismatch {
-                expected: (self.rows, self.cols),
-                actual: (b.rows, b.cols),
-            });
-        }
-        self.data
-            .iter_mut()
-            .zip(&b.data)
-            .for_each(|(a_val, b_val)| *a_val += *b_val);
-        Ok(())
-    }
-
-    pub fn add_vector_to_rows(&mut self, b: &Vec<f32>) -> Result<(), MatrixError> {
-        if self.cols != b.len() {
-            return Err(MatrixError::DimensionMismatch {
-                expected: (self.cols, 1),
-                actual: (b.len(), 1),
-            });
-        }
-        self.data.chunks_mut(self.cols).for_each(|chunk| {
-            chunk
-                .iter_mut()
-                .zip(b)
-                .for_each(|(a_val, b_val)| *a_val += *b_val);
-        });
-        Ok(())
-    }
-
-    pub fn sub(&mut self, b: &Matrix) -> Result<(), MatrixError> {
-        if self.rows != b.rows || self.cols != b.cols {
-            return Err(MatrixError::DimensionMismatch {
-                expected: (self.rows, self.cols),
-                actual: (b.rows, b.cols),
-            });
-        }
-        self.data
-            .iter_mut()
-            .zip(&b.data)
-            .for_each(|(a_val, b_val)| *a_val -= *b_val);
-        Ok(())
-    }
-
-    pub fn mul(&self, b: &Matrix) -> Result<Matrix, MatrixError> {
-        if self.cols != b.rows {
-            return Err(MatrixError::DimensionMismatch {
-                expected: (self.cols, 0),
-                actual: (b.rows, 0),
-            });
-        }
-
-        let b_t = b.transpose()?;
-        let mut c = Matrix::new(self.rows, b.cols, 0.0);
-
-        for i in 0..self.rows {
-            for j in 0..b.cols {
-                let mut s: f32 = 0.0;
-                for k in 0..self.cols {
-                    s += self.data[i * self.cols + k] * b_t.data[j * b_t.cols + k];
-                }
-                c.set(i, j, s);
-            }
-        }
-        Ok(c)
-    }
-
-    pub fn transpose(&self) -> Result<Matrix, MatrixError> {
-        let mut result = Matrix::new(self.cols, self.rows, 0.0);
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                let index = i * self.cols + j;
-                result.set(j, i, self.data[index]);
-            }
-        }
-        Ok(result)
-    }
-
-    pub fn randomize(&mut self, seed: &mut u32) -> Result<(), MatrixError> {
-        self.data.iter_mut().for_each(|v| {
-            *seed = (*seed as u64 * 1103515245 + 12345) as u32 % 2147483648;
-            *v = (*seed as f32) / 2147483648.0 * 2.0 - 1.0;
-        });
-        Ok(())
-    }
-
-    pub fn apply<F>(&mut self, f: F)
-    where
-        F: Fn(f32) -> f32,
-    {
-        self.data.iter_mut().for_each(|x| {
-            *x = f(*x);
-        });
-    }
-}
-
-impl fmt::Display for Matrix {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Matrix ({} x {})\n{:?}\n",
-            self.rows, self.cols, self.data
-        )
-    }
-}
-
 struct Layer {
     weights: Matrix,
     biases: Vec<f32>,
@@ -329,7 +165,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let img_gz = Path::new("/tmp/train-images-idx3-ubyte.gz");
     let img_raw = Path::new("/tmp/train-images-idx3-ubyte");
     let img_url = "https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz";
-    
+
     let lbl_gz = Path::new("/tmp/train-labels-idx1-ubyte.gz");
     let lbl_raw = Path::new("/tmp/train-labels-idx1-ubyte");
     let lbl_url = "https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz";
@@ -362,7 +198,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let probs = softmax(&logits);
 
         let label = labels[i] as usize;
-        
+
         let mut predicted_digit = 0;
         let mut max_prob = -1.0;
         for (idx, &p) in probs.data.iter().enumerate() {
@@ -375,10 +211,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if predicted_digit == label {
             correct_predictions += 1;
         }
-        
+
         running_loss -= (probs.data[label] + 1e-10).ln();
 
-        let mut error = probs; 
+        let mut error = probs;
         let current_val = error.get(0, label)?;
         error.set(0, label, current_val - 1.0);
 
@@ -388,10 +224,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let accuracy = (correct_predictions as f32 / window_size as f32) * 100.0;
             let avg_loss = running_loss / window_size as f32;
             println!(
-                "Sample: {:5} | Accuracy: {:>5.2}% | Avg Loss: {:.4}", 
+                "Sample: {:5} | Accuracy: {:>5.2}% | Avg Loss: {:.4}",
                 i, accuracy, avg_loss
             );
-            
+
             correct_predictions = 0;
             running_loss = 0.0;
         }
