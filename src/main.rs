@@ -1,4 +1,9 @@
-use rust_ml::{Matrix, MatrixError};
+use rust_ml::Matrix;
+use rust_ml::nn::Module;
+use rust_ml::nn::activation::ReLU;
+use rust_ml::nn::linear::Linear;
+use rust_ml::nn::loss::CrossEntropy;
+use rust_ml::nn::sequential::Sequential;
 
 use std::fs::File;
 use std::io::{self, Read};
@@ -99,68 +104,6 @@ fn one_hot_encode(labels: &[u8]) -> Matrix {
     matrix
 }
 
-struct Layer {
-    weights: Matrix,
-    biases: Vec<f32>,
-}
-
-impl Layer {
-    fn new(input_size: usize, output_size: usize, seed: &mut u32) -> Result<Layer, MatrixError> {
-        let mut weights = Matrix::new(input_size, output_size, 0.0);
-        let biases = vec![0.0; output_size];
-
-        weights.randomize(seed)?;
-
-        Ok(Layer { weights, biases })
-    }
-
-    pub fn forward(&self, input: &Matrix) -> Result<Matrix, MatrixError> {
-        let mut res = input.mul(&self.weights)?;
-        res.add_vector_to_rows(&self.biases)?;
-        Ok(res)
-    }
-
-    pub fn update_weights(&mut self, input: &Matrix, grad_output: &Matrix, learning_rate: f32) {
-        let input_t = input.transpose().unwrap();
-        let delta_w = input_t.mul(grad_output).unwrap();
-
-        for i in 0..self.weights.data.len() {
-            self.weights.data[i] -= learning_rate * delta_w.data[i];
-        }
-
-        for i in 0..self.biases.len() {
-            self.biases[i] -= learning_rate * grad_output.data[i];
-        }
-    }
-}
-
-fn relu(x: f32) -> f32 {
-    if x > 0.0 { x } else { 0.0 }
-}
-
-fn sigmoid(x: f32) -> f32 {
-    1.0 / (1.0 + f32::exp(-x))
-}
-
-pub fn softmax(matrix: &Matrix) -> Matrix {
-    let mut result = Matrix::new(matrix.rows, matrix.cols, 0.0);
-
-    for r in 0..matrix.rows {
-        let start = r * matrix.cols;
-        let end = start + matrix.cols;
-        let row = &matrix.data[start..end];
-
-        let max_val = row.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-        let sum: f32 = row.iter().map(|x| f32::exp(x - max_val)).sum();
-
-        for c in 0..row.len() {
-            result.set(r, c, f32::exp(row[c] - max_val) / sum);
-        }
-    }
-
-    result
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let img_gz = Path::new("/tmp/train-images-idx3-ubyte.gz");
     let img_raw = Path::new("/tmp/train-images-idx3-ubyte");
@@ -175,61 +118,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     download_file(lbl_gz, lbl_url);
     unzip_file(lbl_gz);
 
-    let matrix = load_mnist_images(img_raw)?;
+    let images = load_mnist_images(img_raw)?;
     let labels = load_mnist_labels(lbl_raw)?;
+    let mut seed = 12345;
 
-    println!("Dataset Loaded. Images: {}x{}", matrix.rows, matrix.cols);
+    let mut model = Sequential::new(vec![
+        Box::new(Linear::new(784, 128, &mut seed)?),
+        Box::new(ReLU),
+        Box::new(Linear::new(128, 10, &mut seed)?),
+    ]);
+
+    println!("Dataset Loaded. Images: {}x{}", images.rows, images.cols);
     println!("Starting Training...");
 
-    let learning_rate = 0.01;
-    let mut seed = 12345;
-    let mut layer = Layer::new(784, 10, &mut seed)?;
-
-    let mut correct_predictions = 0;
+    let num_samples = images.rows;
     let mut running_loss = 0.0;
+    let mut correct_predictions = 0;
     let window_size = 1000;
 
-    for i in 0..matrix.rows {
+    for i in 0..num_samples {
         let row_start = i * 784;
-        let mut input_row = Matrix::new(1, 784, 0.0);
-        input_row.data.copy_from_slice(&matrix.data[row_start..row_start + 784]);
+        let mut input_matrix = Matrix::new(1, 784, 0.0);
+        input_matrix
+            .data
+            .copy_from_slice(&images.data[row_start..row_start + 784]);
 
-        let logits = layer.forward(&input_row)?;
-        let probs = softmax(&logits);
+        let mut target_matrix = Matrix::new(1, 10, 0.0);
+        target_matrix.set(0, labels[i] as usize, 1.0);
 
-        let label = labels[i] as usize;
+        let prediction = model.forward(&input_matrix)?;
 
-        let mut predicted_digit = 0;
-        let mut max_prob = -1.0;
-        for (idx, &p) in probs.data.iter().enumerate() {
-            if p > max_prob {
-                max_prob = p;
-                predicted_digit = idx;
-            }
-        }
+        let predicted_digit = prediction
+            .data
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .map(|(index, _)| index)
+            .unwrap();
 
-        if predicted_digit == label {
+        if predicted_digit == labels[i] as usize {
             correct_predictions += 1;
         }
 
-        running_loss -= (probs.data[label] + 1e-10).ln();
-
-        let mut error = probs;
-        let current_val = error.get(0, label)?;
-        error.set(0, label, current_val - 1.0);
-
-        layer.update_weights(&input_row, &error, learning_rate);
+        let loss_val = CrossEntropy::loss(&prediction, &target_matrix);
+        running_loss += loss_val;
+        let gradient = CrossEntropy::grad(&prediction, &target_matrix)?;
+        model.backward(&input_matrix, &gradient)?;
 
         if i % window_size == 0 && i > 0 {
             let accuracy = (correct_predictions as f32 / window_size as f32) * 100.0;
-            let avg_loss = running_loss / window_size as f32;
             println!(
                 "Sample: {:5} | Accuracy: {:>5.2}% | Avg Loss: {:.4}",
-                i, accuracy, avg_loss
+                i,
+                accuracy,
+                running_loss / window_size as f32
             );
 
-            correct_predictions = 0;
             running_loss = 0.0;
+            correct_predictions = 0;
         }
     }
 

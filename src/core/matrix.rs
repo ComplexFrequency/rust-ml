@@ -1,6 +1,7 @@
-use std::fmt;
 use crate::core::error::MatrixError;
+use std::fmt;
 
+#[derive(Clone)]
 pub struct Matrix {
     pub rows: usize,
     pub cols: usize,
@@ -28,7 +29,47 @@ impl Matrix {
         self.data[index] = val;
     }
 
-    pub fn add(&mut self, b: &Matrix) -> Result<(), MatrixError> {
+    pub fn add(&self, b: &Matrix) -> Result<Matrix, MatrixError> {
+        if self.rows != b.rows || self.cols != b.cols {
+            return Err(MatrixError::DimensionMismatch {
+                expected: (self.rows, self.cols),
+                actual: (b.rows, b.cols),
+            });
+        }
+        let data = self
+            .data
+            .iter()
+            .zip(&b.data)
+            .map(|(a_val, b_val)| a_val + b_val)
+            .collect();
+        Ok(Matrix {
+            rows: self.rows,
+            cols: self.cols,
+            data,
+        })
+    }
+
+    pub fn sub(&self, b: &Matrix) -> Result<Matrix, MatrixError> {
+        if self.rows != b.rows || self.cols != b.cols {
+            return Err(MatrixError::DimensionMismatch {
+                expected: (self.rows, self.cols),
+                actual: (b.rows, b.cols),
+            });
+        }
+        let data = self
+            .data
+            .iter()
+            .zip(&b.data)
+            .map(|(a_val, b_val)| a_val - b_val)
+            .collect();
+        Ok(Matrix {
+            rows: self.rows,
+            cols: self.cols,
+            data,
+        })
+    }
+
+    pub fn add_assign(&mut self, b: &Matrix) -> Result<(), MatrixError> {
         if self.rows != b.rows || self.cols != b.cols {
             return Err(MatrixError::DimensionMismatch {
                 expected: (self.rows, self.cols),
@@ -39,6 +80,20 @@ impl Matrix {
             .iter_mut()
             .zip(&b.data)
             .for_each(|(a_val, b_val)| *a_val += *b_val);
+        Ok(())
+    }
+
+    pub fn sub_assign(&mut self, b: &Matrix) -> Result<(), MatrixError> {
+        if self.rows != b.rows || self.cols != b.cols {
+            return Err(MatrixError::DimensionMismatch {
+                expected: (self.rows, self.cols),
+                actual: (b.rows, b.cols),
+            });
+        }
+        self.data
+            .iter_mut()
+            .zip(&b.data)
+            .for_each(|(a_val, b_val)| *a_val -= *b_val);
         Ok(())
     }
 
@@ -55,20 +110,6 @@ impl Matrix {
                 .zip(b)
                 .for_each(|(a_val, b_val)| *a_val += *b_val);
         });
-        Ok(())
-    }
-
-    pub fn sub(&mut self, b: &Matrix) -> Result<(), MatrixError> {
-        if self.rows != b.rows || self.cols != b.cols {
-            return Err(MatrixError::DimensionMismatch {
-                expected: (self.rows, self.cols),
-                actual: (b.rows, b.cols),
-            });
-        }
-        self.data
-            .iter_mut()
-            .zip(&b.data)
-            .for_each(|(a_val, b_val)| *a_val -= *b_val);
         Ok(())
     }
 
@@ -133,4 +174,3 @@ impl fmt::Display for Matrix {
         )
     }
 }
-
