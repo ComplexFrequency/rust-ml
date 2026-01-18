@@ -2,6 +2,8 @@
 
 A deep learning framework built entirely from scratch in Pure Rust.
 
+https://github.com/user-attachments/assets/176ec2a4-06b6-4f6a-8e08-27411a070300
+
 ## Project Mission
 My main objective with this repository is to learn and practice Rust by implementing the main deep learning concepts from scratch - using no libraries other than the standard Rust library.
 
