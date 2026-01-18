@@ -3,7 +3,9 @@ use crate::{Matrix, MatrixError};
 
 pub struct Linear {
     weights: Matrix,
-    biases: Vec<f32>,
+    biases: Matrix,
+    grad_weights: Matrix,
+    grad_biases: Matrix,
 }
 
 impl Linear {
@@ -13,18 +15,25 @@ impl Linear {
         seed: &mut u32,
     ) -> Result<Linear, MatrixError> {
         let mut weights = Matrix::new(input_size, output_size, 0.0);
-        let biases = vec![0.0; output_size];
+        let grad_weights = Matrix::new(input_size, output_size, 0.0);
+        let biases = Matrix::new(1, output_size, 0.0);
+        let grad_biases = Matrix::new(1, output_size, 0.0);
 
         weights.randomize(seed)?;
 
-        Ok(Linear { weights, biases })
+        Ok(Linear {
+            weights,
+            biases,
+            grad_weights,
+            grad_biases,
+        })
     }
 }
 
 impl Module for Linear {
     fn forward(&self, input: &Matrix) -> Result<Matrix, MatrixError> {
         let mut res = input.mul(&self.weights)?;
-        res.add_vector_to_rows(&self.biases)?;
+        res.add_vector_to_rows(&self.biases.data)?;
         Ok(res)
     }
 
@@ -33,15 +42,16 @@ impl Module for Linear {
         let grad_input = grad_output.mul(&weights_t)?;
 
         let input_t = input.transpose()?;
-        let grad_weights = input_t.mul(grad_output)?;
+        self.grad_weights = input_t.mul(grad_output)?;
+        self.grad_biases = grad_output.clone();
 
-        let learning_rate = 0.01;
-        for i in 0..self.weights.data.len() {
-            self.weights.data[i] -= learning_rate * grad_weights.data[i];
-        }
-        for i in 0..self.biases.len() {
-            self.biases[i] -= learning_rate * grad_output.data[i];
-        }
         Ok(grad_input)
+    }
+
+    fn get_params_and_gradients(&mut self) -> Vec<(&mut Matrix, &mut Matrix)> {
+        vec![
+            (&mut self.weights, &mut self.grad_weights),
+            (&mut self.biases, &mut self.grad_biases),
+        ]
     }
 }

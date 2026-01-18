@@ -42,4 +42,11 @@ impl Module for Sequential {
 
         Ok(current_grad)
     }
+
+    fn get_params_and_gradients(&mut self) -> Vec<(&mut Matrix, &mut Matrix)> {
+        self.layers
+            .iter_mut()
+            .flat_map(|layer| layer.get_params_and_gradients())
+            .collect()
+    }
 }

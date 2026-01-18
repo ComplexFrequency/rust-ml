@@ -4,6 +4,7 @@ use rust_ml::nn::activation::ReLU;
 use rust_ml::nn::linear::Linear;
 use rust_ml::nn::loss::CrossEntropy;
 use rust_ml::nn::sequential::Sequential;
+use rust_ml::optim::SGD;
 
 use std::fs::File;
 use std::io::{self, Read};
@@ -94,16 +95,6 @@ fn load_mnist_labels(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>>
     Ok(data)
 }
 
-fn one_hot_encode(labels: &[u8]) -> Matrix {
-    let mut matrix = Matrix::new(labels.len(), 10, 0.0);
-
-    for (i, &label) in labels.iter().enumerate() {
-        matrix.set(i, label as usize, 1.0);
-    }
-
-    matrix
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let img_gz = Path::new("/tmp/train-images-idx3-ubyte.gz");
     let img_raw = Path::new("/tmp/train-images-idx3-ubyte");
@@ -122,11 +113,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let labels = load_mnist_labels(lbl_raw)?;
     let mut seed = 12345;
 
+    const IMAGE_SIZE: usize = 784;
+
     let mut model = Sequential::new(vec![
-        Box::new(Linear::new(784, 128, &mut seed)?),
+        Box::new(Linear::new(IMAGE_SIZE, 128, &mut seed)?),
         Box::new(ReLU),
         Box::new(Linear::new(128, 10, &mut seed)?),
     ]);
+
+    let optimizer = SGD::new(0.001);
 
     println!("Dataset Loaded. Images: {}x{}", images.rows, images.cols);
     println!("Starting Training...");
@@ -137,17 +132,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window_size = 1000;
 
     for i in 0..num_samples {
-        let row_start = i * 784;
-        let mut input_matrix = Matrix::new(1, 784, 0.0);
+        let row_start = i * IMAGE_SIZE;
+        let row_end = row_start + IMAGE_SIZE;
+        let mut input_matrix = Matrix::new(1, IMAGE_SIZE, 0.0);
         input_matrix
             .data
-            .copy_from_slice(&images.data[row_start..row_start + 784]);
+            .copy_from_slice(&images.data[row_start..row_end]);
 
         let mut target_matrix = Matrix::new(1, 10, 0.0);
         target_matrix.set(0, labels[i] as usize, 1.0);
 
         let prediction = model.forward(&input_matrix)?;
-
         let predicted_digit = prediction
             .data
             .iter()
@@ -164,6 +159,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         running_loss += loss_val;
         let gradient = CrossEntropy::grad(&prediction, &target_matrix)?;
         model.backward(&input_matrix, &gradient)?;
+
+        optimizer.step(&mut model);
 
         if i % window_size == 0 && i > 0 {
             let accuracy = (correct_predictions as f32 / window_size as f32) * 100.0;
