@@ -42,7 +42,7 @@ impl Module for Linear {
         let grad_input = grad_output.mul(&weights_t)?;
 
         let input_t = input.transpose()?;
-        self.grad_weights = input_t.mul(grad_output)?;
+        self.grad_weights = self.grad_weights.add(&input_t.mul(grad_output)?)?;
         self.grad_biases = grad_output.clone();
 
         Ok(grad_input)
@@ -53,5 +53,10 @@ impl Module for Linear {
             (&mut self.weights, &mut self.grad_weights),
             (&mut self.biases, &mut self.grad_biases),
         ]
+    }
+
+    fn zero_grad(&mut self) {
+        self.grad_weights.apply(|_| 0.0);
+        self.grad_biases.apply(|_| 0.0);
     }
 }

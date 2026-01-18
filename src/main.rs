@@ -4,7 +4,7 @@ use rust_ml::nn::activation::ReLU;
 use rust_ml::nn::linear::Linear;
 use rust_ml::nn::loss::CrossEntropy;
 use rust_ml::nn::sequential::Sequential;
-use rust_ml::optim::SGD;
+use rust_ml::optim::{Optimizer, SGD};
 
 use std::fs::File;
 use std::io::{self, Read};
@@ -114,6 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut seed = 12345;
 
     const IMAGE_SIZE: usize = 784;
+    const BATCH_SIZE: usize = 64;
 
     let mut model = Sequential::new(vec![
         Box::new(Linear::new(IMAGE_SIZE, 128, &mut seed)?),
@@ -121,58 +122,77 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(Linear::new(128, 10, &mut seed)?),
     ]);
 
-    let optimizer = SGD::new(0.001);
+    let optimizer = SGD::new(0.005);
 
     println!("Dataset Loaded. Images: {}x{}", images.rows, images.cols);
-    println!("Starting Training...");
+    println!("Starting Training with Batch Size: {}...", BATCH_SIZE);
 
     let num_samples = images.rows;
     let mut running_loss = 0.0;
     let mut correct_predictions = 0;
-    let window_size = 1000;
+    let mut samples_processed = 0;
+    let report_interval = 1000;
 
-    for i in 0..num_samples {
+    for i in (0..num_samples).step_by(BATCH_SIZE) {
+        let current_batch_size = if i + BATCH_SIZE > num_samples {
+            num_samples - i
+        } else {
+            BATCH_SIZE
+        };
+
         let row_start = i * IMAGE_SIZE;
-        let row_end = row_start + IMAGE_SIZE;
-        let mut input_matrix = Matrix::new(1, IMAGE_SIZE, 0.0);
+        let row_end = row_start + (current_batch_size * IMAGE_SIZE);
+        let mut input_matrix = Matrix::new(current_batch_size, IMAGE_SIZE, 0.0);
         input_matrix
             .data
             .copy_from_slice(&images.data[row_start..row_end]);
 
-        let mut target_matrix = Matrix::new(1, 10, 0.0);
-        target_matrix.set(0, labels[i] as usize, 1.0);
+        let mut target_matrix = Matrix::new(current_batch_size, 10, 0.0);
+        for b in 0..current_batch_size {
+            target_matrix.set(b, labels[i + b] as usize, 1.0);
+        }
 
         let prediction = model.forward(&input_matrix)?;
-        let predicted_digit = prediction
-            .data
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .map(|(index, _)| index)
-            .unwrap();
 
-        if predicted_digit == labels[i] as usize {
-            correct_predictions += 1;
+        for b in 0..current_batch_size {
+            let start = b * 10;
+            let end = start + 10;
+            let row_pred = &prediction.data[start..end];
+
+            let predicted_digit = row_pred
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .map(|(idx, _)| idx)
+                .unwrap();
+
+            if predicted_digit == labels[i + b] as usize {
+                correct_predictions += 1;
+            }
         }
 
         let loss_val = CrossEntropy::loss(&prediction, &target_matrix);
-        running_loss += loss_val;
+        running_loss += loss_val * current_batch_size as f32; // Scale by batch
+
         let gradient = CrossEntropy::grad(&prediction, &target_matrix)?;
         model.backward(&input_matrix, &gradient)?;
 
         optimizer.step(&mut model);
 
-        if i % window_size == 0 && i > 0 {
-            let accuracy = (correct_predictions as f32 / window_size as f32) * 100.0;
+        samples_processed += current_batch_size;
+
+        if samples_processed >= report_interval {
+            let accuracy = (correct_predictions as f32 / samples_processed as f32) * 100.0;
             println!(
                 "Sample: {:5} | Accuracy: {:>5.2}% | Avg Loss: {:.4}",
                 i,
                 accuracy,
-                running_loss / window_size as f32
+                running_loss / samples_processed as f32
             );
 
             running_loss = 0.0;
             correct_predictions = 0;
+            samples_processed = 0;
         }
     }
 

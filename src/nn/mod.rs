@@ -13,4 +13,6 @@ pub trait Module {
     fn get_params_and_gradients(&mut self) -> Vec<(&mut Matrix, &mut Matrix)> {
         vec![]
     }
+
+    fn zero_grad(&mut self) {}
 }

@@ -37,7 +37,7 @@ impl Module for Sequential {
 
         for (index, layer) in self.layers.iter_mut().enumerate().rev() {
             let layer_input = &cache[index];
-            current_grad = layer.backward(&layer_input, &current_grad)?;
+            current_grad = layer.backward(layer_input, &current_grad)?;
         }
 
         Ok(current_grad)
@@ -48,5 +48,9 @@ impl Module for Sequential {
             .iter_mut()
             .flat_map(|layer| layer.get_params_and_gradients())
             .collect()
+    }
+
+    fn zero_grad(&mut self) {
+        self.layers.iter_mut().for_each(|layer| layer.zero_grad());
     }
 }

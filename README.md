@@ -12,7 +12,8 @@ Additionally, because this is a *learning* project, I will absolutely not use AI
 ### Phase 1: Foundations (Current)
 - [x] Basic Matrix Engine.
 - [x] MNIST Digit Classification (Single Layer).
-- [ ] **Next:** Deep Neural Network (MLP) with modular layers.
+- [x] Deep Neural Network (MLP) with modular layers.
+- [ ] **Next:** Framework polish (Optimizers, Checkpointing, and Testing).
 
 ### Phase 2: Computer Vision
 - [ ] Convolutional Neural Networks (CNNs).
