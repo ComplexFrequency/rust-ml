@@ -7,6 +7,7 @@ pub struct LeakyReLU {
     alpha: f32,
 }
 pub struct Softmax;
+pub struct Identity;
 
 impl Module for ReLU {
     fn forward(&self, input: &Matrix) -> Result<Matrix, MatrixError> {
@@ -103,5 +104,15 @@ impl Module for Softmax {
             }
         }
         Ok(grad_input)
+    }
+}
+
+impl Module for Identity {
+    fn forward(&self, input: &Matrix) -> Result<Matrix, MatrixError> {
+        Ok(input.clone())
+    }
+
+    fn backward(&mut self, _input: &Matrix, grad_output: &Matrix) -> Result<Matrix, MatrixError> {
+        Ok(grad_output.clone())
     }
 }
