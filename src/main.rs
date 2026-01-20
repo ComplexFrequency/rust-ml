@@ -69,13 +69,11 @@ fn load_mnist_images(path: &Path) -> Result<Matrix, Box<dyn std::error::Error>> 
     }
 
     let pixels_per_image = rows * cols;
-    let mut matrix = Matrix::new(num_images, pixels_per_image, 0.0);
-
     let mut raw_pixels = Vec::new();
     file.read_to_end(&mut raw_pixels)?;
 
-    matrix.data = raw_pixels.iter().map(|x| (*x as f32) / 255.0).collect();
-
+    let data: Vec<f32> = raw_pixels.iter().map(|x| (*x as f32) / 255.0).collect();
+    let matrix = Matrix::from_slice(num_images, pixels_per_image, &data)?;
     Ok(matrix)
 }
 
@@ -142,11 +140,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let row_start = i * IMAGE_SIZE;
         let row_end = row_start + (current_batch_size * IMAGE_SIZE);
-        let mut input_matrix = Matrix::new(current_batch_size, IMAGE_SIZE, 0.0);
-        input_matrix
-            .data
-            .copy_from_slice(&images.data[row_start..row_end]);
-
+        let input_matrix = Matrix::from_slice(
+            current_batch_size,
+            IMAGE_SIZE,
+            &images.data[row_start..row_end],
+        )?;
         let mut target_matrix = Matrix::new(current_batch_size, 10, 0.0);
         for b in 0..current_batch_size {
             target_matrix.set(b, labels[i + b] as usize, 1.0);

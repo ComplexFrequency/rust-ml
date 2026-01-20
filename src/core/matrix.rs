@@ -163,6 +163,21 @@ impl Matrix {
             *x = f(*x);
         });
     }
+
+    pub fn from_slice(rows: usize, cols: usize, data: &[f32]) -> Result<Self, MatrixError> {
+        if data.len() != rows * cols {
+            return Err(MatrixError::DimensionMismatch {
+                expected: (rows, cols),
+                actual: (1, data.len()),
+            });
+        }
+
+        Ok(Matrix {
+            rows,
+            cols,
+            data: data.to_vec(),
+        })
+    }
 }
 
 impl fmt::Display for Matrix {
