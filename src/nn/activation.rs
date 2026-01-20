@@ -3,6 +3,9 @@ use crate::core::matrix::Matrix;
 use crate::nn::Module;
 
 pub struct ReLU;
+pub struct LeakyReLU {
+    alpha: f32,
+}
 pub struct Softmax;
 
 impl Module for ReLU {
@@ -22,6 +25,38 @@ impl Module for ReLU {
             .iter()
             .zip(grad_output.data.iter())
             .map(|(x, g)| if *x > 0.0 { *g } else { 0.0 })
+            .collect();
+        Ok(Matrix {
+            rows: input.rows,
+            cols: input.cols,
+            data,
+        })
+    }
+}
+
+impl LeakyReLU {
+    pub fn new(alpha: f32) -> Self {
+        Self { alpha }
+    }
+}
+
+impl Module for LeakyReLU {
+    fn forward(&self, input: &Matrix) -> Result<Matrix, MatrixError> {
+        let mut res = Matrix {
+            rows: input.rows,
+            cols: input.cols,
+            data: input.data.clone(),
+        };
+        res.apply(|x| if x > 0.0 { x } else { self.alpha * x });
+        Ok(res)
+    }
+
+    fn backward(&mut self, input: &Matrix, grad_output: &Matrix) -> Result<Matrix, MatrixError> {
+        let data = input
+            .data
+            .iter()
+            .zip(grad_output.data.iter())
+            .map(|(x, g)| if *x > 0.0 { *g } else { self.alpha * g })
             .collect();
         Ok(Matrix {
             rows: input.rows,
