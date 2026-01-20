@@ -14,6 +14,13 @@ impl Sequential {
             forward_cache: RefCell::new(Vec::new()),
         }
     }
+
+    pub fn total_parameters(&mut self) -> usize {
+        self.get_params_and_gradients()
+            .iter()
+            .map(|(p, _)| p.data.len())
+            .sum()
+    }
 }
 
 impl Module for Sequential {
